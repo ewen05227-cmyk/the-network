@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Onion Router | Deep Network</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.1/anime.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Share+Tech+Mono&display=swap');
+
+        body {
+            background-color: #0d0814; /* 极深洋葱紫黑 */
+            color: #d1bbf9;
+            font-family: 'Share Tech Mono', 'Fira Code', monospace;
+            margin: 0; overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* 洋葱浏览器标志性紫色渐变 */
+        .tor-bg {
+            position: fixed; inset: 0; z-index: 0;
+            background: radial-gradient(circle at 50% -20%, #3a1a5e 0%, #0d0814 60%);
+            opacity: 0.8;
+        }
+
+        .app-container {
+            position: relative; z-index: 10;
+            max-width: 800px; margin: 0 auto; height: 100vh;
+            display: flex; flex-direction: column;
+            border-left: 1px solid rgba(125, 75, 185, 0.2);
+            border-right: 1px solid rgba(125, 75, 185, 0.2);
+            background: rgba(13, 8, 20, 0.6);
+            backdrop-filter: blur(10px);
+        }
+
+        /* 顶部假浏览器地址栏 */
+        .browser-bar {
+            background: #1b1228; border-bottom: 1px solid #3a1a5e;
+            padding: 12px 20px; display: flex; items-center; gap: 15px;
+        }
+        .url-box {
+            background: #0d0814; border: 1px solid #3a1a5e; border-radius: 20px;
+            padding: 6px 16px; flex-1; display: flex; items-center; gap: 10px;
+            color: #a47af1; font-size: 14px; letter-spacing: 1px; width: 100%;
+        }
+        .onion-badge {
+            background: #5c2799; color: white; padding: 2px 8px;
+            border-radius: 10px; font-size: 10px; font-weight: bold;
+        }
+
+        /* 核心交互区 */
+        .main-content { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; }
+
+        /* 洋葱路由节点画布 */
+        #route-canvas { width: 100%; height: 250px; margin-bottom: 20px; }
+
+        /* 加密连接按钮 */
+        .btn-connect {
+            background: transparent; color: #a47af1;
+            border: 2px solid #5c2799; padding: 15px 40px;
+            font-size: 18px; font-family: 'Share Tech Mono';
+            text-transform: uppercase; letter-spacing: 3px;
+            cursor: pointer; position: relative; overflow: hidden;
+            transition: all 0.3s; box-shadow: 0 0 15px rgba(92, 39, 153, 0.3);
+        }
+        .btn-connect:hover { background: #5c2799; color: white; box-shadow: 0 0 30px rgba(92, 39, 153, 0.6); }
+        .btn-connect:active { transform: scale(0.95); }
+
+        /* 极客终端日志 */
+        .terminal-box {
+            width: 90%; background: #050308; border: 1px solid #2a1640;
+            height: 200px; padding: 15px; overflow-y: hidden;
+            font-size: 12px; color: #764bbf; line-height: 1.6;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8); margin-top: 20px;
+        }
+        .log-line { opacity: 0; transform: translateX(-10px); }
+        .text-green { color: #00ff88; }
+        .text-purple { color: #d1bbf9; }
+        .text-alert { color: #ff3366; }
+
+        /* 乱码文本特效 */
+        .glitch-text { display: inline-block; }
+    </style>
+</head>
+<body>
+
+    <div class="tor-bg"></div>
+
+    <div class="app-container">
+        
+        <header class="browser-bar">
+            <div class="flex gap-2">
+                <div class="w-3 h-3 rounded-full bg-[#ff3366] opacity-50"></div>
+                <div class="w-3 h-3 rounded-full bg-[#f4b820] opacity-50"></div>
+                <div class="w-3 h-3 rounded-full bg-[#00ff88] opacity-50"></div>
+            </div>
+            <div class="url-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span id="url-text" class="glitch-text">awaiting_connection...</span>
+                <span class="onion-badge ml-auto">.ONION</span>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <svg id="tor-logo" width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#a47af1" stroke-width="1.5" class="mb-6 opacity-80">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="6"/>
+                <circle cx="12" cy="12" r="2"/>
+                <path d="M12 2a10 10 0 0 1 10 10M12 22a10 10 0 0 1-10-10"/>
+            </svg>
+
+            <canvas id="route-canvas"></canvas>
+
+            <button class="btn-connect" id="connect-btn" onclick="startTorRouting()">Establish Circuit</button>
+
+            <div class="terminal-box" id="terminal">
+                <div class="log-line text-purple">Tor Protocol v0.4.7.13 Initialized.</div>
+                <div class="log-line text-purple">Waiting for user execution...</div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // === 1. 乱码文本引擎 (黑客密码破译感) ===
+        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*";
+        function scrambleText(element, finalString, duration = 1000) {
+            let iterations = 0;
+            const interval = setInterval(() => {
+                element.innerText = finalString.split("")
+                    .map((letter, index) => {
+                        if(index < iterations) return finalString[index];
+                        return letters[Math.floor(Math.random() * letters.length)];
+                    })
+                    .join("");
+                if(iterations >= finalString.length) clearInterval(interval);
+                iterations += 1 / (duration / 50); // 控制乱码解密速度
+            }, 30);
+        }
+
+        // === 2. 洋葱路由节点画布 (Canvas 连线) ===
+        const canvas = document.getElementById('route-canvas');
+        const ctx = canvas.getContext('2d');
+        let cw = canvas.width = canvas.offsetWidth;
+        let ch = canvas.height = canvas.offsetHeight;
+        
+        const nodes = [
+            { x: cw * 0.1, y: ch / 2, label: "You", active: false },
+            { x: cw * 0.35, y: ch / 2 - 40, label: "Entry Guard", active: false },
+            { x: cw * 0.65, y: ch / 2 + 40, label: "Middle Relay", active: false },
+            { x: cw * 0.9, y: ch / 2, label: "Exit Node", active: false }
+        ];
+
+        function drawNetwork() {
+            ctx.clearRect(0, 0, cw, ch);
+            
+            // 画连线
+            ctx.beginPath();
+            ctx.moveTo(nodes[0].x, nodes[0].y);
+            for(let i = 1; i < nodes.length; i++) {
+                ctx.lineTo(nodes[i].x, nodes[i].y);
+            }
+            ctx.strokeStyle = "rgba(125, 75, 185, 0.2)";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // 画激活的连线 (动画过程)
+            ctx.beginPath();
+            ctx.moveTo(nodes[0].x, nodes[0].y);
+            let activePathDrawn = false;
+            for(let i = 1; i < nodes.length; i++) {
+                if(nodes[i].active) {
+                    ctx.lineTo(nodes[i].x, nodes[i].y);
+                    activePathDrawn = true;
+                }
+            }
+            if(activePathDrawn) {
+                ctx.strokeStyle = "#00ff88"; // 连接成功变为绿色
+                ctx.lineWidth = 3;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = "#00ff88";
+                ctx.stroke();
+                ctx.shadowBlur = 0; // 重置阴影
+            }
+
+            // 画节点
+            nodes.forEach(node => {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 8, 0, Math.PI * 2);
+                ctx.fillStyle = node.active ? "#00ff88" : "#5c2799";
+                if(node.active) {
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = "#00ff88";
+                }
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                
+                ctx.fillStyle = "#a47af1";
+                ctx.font = "10px Share Tech Mono";
+                ctx.textAlign = "center";
+                ctx.fillText(node.label, node.x, node.y - 15);
+            });
+        }
+        drawNetwork();
+
+        // === 3. 核心连接逻辑与日志系统 ===
+        const terminal = document.getElementById('terminal');
+        let isConnected = false;
+
+        function addLog(text, colorClass = "text-purple") {
+            const line = document.createElement('div');
+            line.className = `log-line ${colorClass} mt-1`;
+            line.innerText = `> ${text}`;
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+            
+            // 日志单行滑入动画
+            anime({
+                targets: line,
+                opacity: 1, translateX: 0,
+                duration: 400, easing: 'easeOutExpo'
+            });
+        }
+
+        function startTorRouting() {
+            if(isConnected) return;
+            isConnected = true;
+            const btn = document.getElementById('connect-btn');
+            btn.style.pointerEvents = 'none';
+            btn.style.opacity = '0.5';
+            btn.innerText = "Encrypting...";
+
+            // 触发中心 Logo 旋转
+            anime({
+                targets: '#tor-logo',
+                rotate: 360,
+                duration: 2000,
+                loop: true,
+                easing: 'linear'
+            });
+
+            // 专属模拟日志序列
+            terminal.innerHTML = ''; // 清空日志
+            const logs = [
+                { t: "[BOOT] Initializing Tor network consensus...", c: "text-purple", delay: 100 },
+                { t: "[LOCAL] Binding to local endpoint: Enping, Guangdong.", c: "text-purple", delay: 600 },
+                { t: "[PROXY] Detecting custom protocol override...", c: "text-purple", delay: 1200 },
+                { t: "[OVERRIDE] vless/XTLS wrapper successfully injected.", c: "text-alert", delay: 1800 },
+                { t: "[AUTH] Welcome back, Operator: Chris Wu.", c: "text-green", delay: 2500 },
+                { t: "[HANDSHAKE] Negotiating Entry Guard node...", c: "text-purple", delay: 3500 },
+                { t: "[HOP 1] France (IP: 91.121.xx.xx) Secured.", c: "text-green", delay: 4200 },
+                { t: "[HANDSHAKE] Establishing Middle Relay...", c: "text-purple", delay: 4800 },
+                { t: "[HOP 2] Iceland (IP: 193.107.xx.xx) Secured.", c: "text-green", delay: 5500 },
+                { t: "[HANDSHAKE] Routing to Exit Node...", c: "text-purple", delay: 6100 },
+                { t: "[HOP 3] Switzerland (IP: 185.129.xx.xx) Exit Node Secured.", c: "text-alert", delay: 6800 },
+                { t: "[SUCCESS] Circuit Established. Connection is private.", c: "text-green", delay: 7500 }
+            ];
+
+            logs.forEach(log => {
+                setTimeout(() => addLog(log.t, log.c), log.delay);
+            });
+
+            // 节点点亮动画
+            setTimeout(() => { nodes[0].active = true; drawNetwork(); }, 2500);
+            setTimeout(() => { nodes[1].active = true; drawNetwork(); }, 4200);
+            setTimeout(() => { nodes[2].active = true; drawNetwork(); }, 5500);
+            setTimeout(() => { 
+                nodes[3].active = true; 
+                drawNetwork(); 
+                
+                // 连接成功后的最终状态
+                anime.remove('#tor-logo');
+                document.getElementById('tor-logo').style.stroke = "#00ff88";
+                btn.innerText = "NETWORK SECURED";
+                btn.style.border = "2px solid #00ff88";
+                btn.style.color = "#00ff88";
+                
+                // 顶部地址栏乱码解密成 .onion 网址
+                const urlEl = document.getElementById('url-text');
+                urlEl.style.color = "#00ff88";
+                scrambleText(urlEl, "expyuz5tatdgv7q6zx...xtls.onion", 1500);
+
+            }, 7500);
+        }
+
+        // 窗口大小适配
+        window.addEventListener('resize', () => {
+            cw = canvas.width = canvas.offsetWidth;
+            ch = canvas.height = canvas.offsetHeight;
+            nodes[0].x = cw * 0.1; nodes[1].x = cw * 0.35; 
+            nodes[2].x = cw * 0.65; nodes[3].x = cw * 0.9;
+            drawNetwork();
+        });
+    </script>
+</body>
+</html>
